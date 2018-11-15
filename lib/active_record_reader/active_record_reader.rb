@@ -1,94 +1,94 @@
 #
-# ActiveRecord read from a slave
+# ActiveRecord read from a reader
 #
-module ActiveRecordSlave
+module ActiveRecordReader
 
-  # Install ActiveRecord::Slave into ActiveRecord to redirect reads to the slave
+  # Install ActiveRecord::Reader into ActiveRecord to redirect reads to the reader
   # Parameters:
   #   adapter_class:
   #     By default, only the default Database adapter (ActiveRecord::Base.connection.class)
-  #     is extended with slave read capabilities
+  #     is extended with reader read capabilities
   #
   #   environment:
   #     In a non-Rails environment, supply the environment such as
   #     'development', 'production'
   def self.install!(adapter_class = nil, environment = nil)
-    slave_config =
+    reader_config =
       if ActiveRecord::Base.connection.respond_to?(:config)
-        ActiveRecord::Base.connection.config[:slave]
+        ActiveRecord::Base.connection.config[:reader]
       else
-        ActiveRecord::Base.configurations[environment || Rails.env]['slave']
+        ActiveRecord::Base.configurations[environment || Rails.env]['reader']
       end
-    if slave_config
-      ActiveRecord::Base.logger.info "ActiveRecordSlave.install! v#{ActiveRecordSlave::VERSION} Establishing connection to slave database"
-      Slave.establish_connection(slave_config)
+    if reader_config
+      ActiveRecord::Base.logger.info "ActiveRecordReader.install! v#{ActiveRecordReader::VERSION} Establishing connection to reader database"
+      Reader.establish_connection(reader_config)
 
       # Inject a new #select method into the ActiveRecord Database adapter
       base = adapter_class || ActiveRecord::Base.connection.class
       base.send(:include, InstanceMethods)
     else
-      ActiveRecord::Base.logger.info "ActiveRecordSlave not installed since no slave database defined"
+      ActiveRecord::Base.logger.info "ActiveRecordReader not installed since no reader database defined"
     end
   end
 
-  # Force reads for the supplied block to read from the master database
+  # Force reads for the supplied block to read from the primary database
   # Only applies to calls made within the current thread
-  def self.read_from_master
-    return yield if read_from_master?
+  def self.read_from_primary
+    return yield if read_from_primary?
     begin
-      # Set :master indicator in thread local storage so that it is visible
+      # Set :primary indicator in thread local storage so that it is visible
       # during the select call
-      read_from_master!
+      read_from_primary!
       yield
     ensure
-      read_from_slave!
+      read_from_reader!
     end
   end
 
   #
-  # The default behavior can also set to read/write operations against master
-  # Create an initializer file config/initializer/active_record_slave.rb
-  # and set ActiveRecordSlave.read_from_master! to force read from master.
-  # Then use this method and supply block to read from the slave database
+  # The default behavior can also set to read/write operations against primary
+  # Create an initializer file config/initializer/active_record_reader.rb
+  # and set ActiveRecordReader.read_from_primary! to force read from primary.
+  # Then use this method and supply block to read from the reader database
   # Only applies to calls made within the current thread
-  def self.read_from_slave
-    return yield if read_from_slave?
+  def self.read_from_reader
+    return yield if read_from_reader?
     begin
       # Set nil indicator in thread local storage so that it is visible
       # during the select call
-      read_from_slave!
+      read_from_reader!
       yield
     ensure
-      read_from_master!
+      read_from_primary!
     end
   end
 
-  # Whether this thread is currently forcing all reads to go against the master database
-  def self.read_from_master?
-    thread_variable_get(:active_record_slave) == :master
+  # Whether this thread is currently forcing all reads to go against the primary database
+  def self.read_from_primary?
+    thread_variable_get(:active_record_reader) == :primary
   end
 
-  # Whether this thread is currently forcing all reads to go against the slave database
-  def self.read_from_slave?
-    thread_variable_get(:active_record_slave) == nil
+  # Whether this thread is currently forcing all reads to go against the reader database
+  def self.read_from_reader?
+    thread_variable_get(:active_record_reader) == nil
   end
 
-  # Force all subsequent reads on this thread and any fibers called by this thread to go the master
-  def self.read_from_master!
-    thread_variable_set(:active_record_slave, :master)
+  # Force all subsequent reads on this thread and any fibers called by this thread to go the primary
+  def self.read_from_primary!
+    thread_variable_set(:active_record_reader, :primary)
   end
 
-  # Subsequent reads on this thread and any fibers called by this thread can go to a slave
-  def self.read_from_slave!
-    thread_variable_set(:active_record_slave, nil)
+  # Subsequent reads on this thread and any fibers called by this thread can go to a reader
+  def self.read_from_reader!
+    thread_variable_set(:active_record_reader, nil)
   end
 
-  # Returns whether slave reads are ignoring transactions
+  # Returns whether reader reads are ignoring transactions
   def self.ignore_transactions?
     @ignore_transactions
   end
 
-  # Set whether slave reads should ignore transactions
+  # Set whether reader reads should ignore transactions
   def self.ignore_transactions=(ignore_transactions)
     @ignore_transactions = ignore_transactions
   end
